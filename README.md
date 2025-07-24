@@ -1,36 +1,212 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+# Better Auth + Neon DB + Prisma ORM + NextJS Learning Web App
 
-First, run the development server:
+This NextJS web application showcases how you can use Better Auth with Prisma ORM (through Prisma adapter) in your application.
+
+
+
+
+## Project Set-Up
+
+Create a folder and create new NextJS project in there:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+  npx create-next-app@latest .
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Install Prisma and dependencies
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+  npm install prisma --save-dev
+  npm install @prisma/client
+```
+## Prisma Set-Up
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Initialize Prisma in your project:
 
-## Learn More
+```bash
+  npx prisma init
+```
 
-To learn more about Next.js, take a look at the following resources:
+Now remove ***output   = "../src/generated/prisma"*** from the ***schema.prisma*** so the file looks like this:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+  generator client {
+    provider = "prisma-client-js"
+  }
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
+```
 
-## Deploy on Vercel
+Now add the database connection string into the ***.env*** to `DATABASE_URL=`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Configure the Prisma client generator:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+  npx prisma generate
+```
+
+Create ***prisma.ts*** file in `src/lib` folder and set up the Prisma client like this:
+
+```ts
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = global as unknown as {
+	prisma: PrismaClient;
+};
+
+const prisma = globalForPrisma.prisma || new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+export default prisma;
+```
+
+## Better-Auth Set-Up
+
+First, install the Better-Auth core package:
+
+```bash
+  npm install better-auth
+```
+
+Next, generate a secure secret that Better-Auth will use to sign authentication tokens. This ensures your tokens cannot be messed with.
+
+```bash
+npx @better-auth/cli@latest secret
+```
+
+Copy the generated secret and add it, along with your application's URL, to your ***.env*** file:
+
+`BETTER_AUTH_SECRET=your-generated-secret`
+
+`BETTER_AUTH_URL=http://localhost:3000`
+
+Create ***auth.ts*** file in `src/lib` folder and set up the Better Auth client with the Prisma adapter:
+
+```ts
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import prisma from "@/lib/prisma";
+import { nextCookies } from "better-auth/next-js";
+
+export const auth = betterAuth({
+	database: prismaAdapter(prisma, {
+		provider: "postgresql", // Change based on you database
+	}),
+	emailAndPassword: { // This enables e-mail and password provider
+		enabled: true,  // For other providers check the documentation
+		autoSignIn: false,
+	},
+	plugins: [nextCookies()], // Allows for server-side authentication
+});
+```
+
+Add Better-Auth models to your schema
+
+```bash
+  npx @better-auth/cli generate
+```
+
+This will add the [following models](https://www.prisma.io/docs/guides/betterauth-nextjs#32-add-better-auth-models-to-your-schema).
+
+Migrate the database:
+
+```bash
+  npx prisma migrate dev --name add-auth-models
+```
+
+Set up the API routes in ***src/app/api/auth/[...all]/route.ts***:
+
+```ts
+import { auth } from "@/lib/auth";
+import { toNextJsHandler } from "better-auth/next-js";
+ 
+export const { POST, GET } = toNextJsHandler(auth);
+```
+
+Next, you'll need a client-side utility to interact with these endpoints from your React components. Create a new file ***src/lib/auth-client.ts***:
+
+```ts
+import { createAuthClient } from 'better-auth/react'
+
+export const { signIn, signUp, signOut, useSession } = createAuthClient()
+```
+## Basic Usage
+
+### Sign Up Action
+
+```ts
+"use server";
+
+export async function signUp(values: z.infer<typeof signUpFormSchema>) {
+	const { name, email, password } = values;
+
+	const response = await auth.api.signUpEmail({
+		body: {
+			name,
+			email,
+			password,
+		},
+		asResponse: true,
+	});
+
+	if (response.status !== 200) {
+		return {
+			error: "Něco se pokazilo",
+		};
+	}
+
+	redirect("/prihlaseni");
+}
+```
+
+### Sign In Action
+
+```ts
+"use server";
+
+export async function signIn(values: z.infer<typeof signInFormSchema>) {
+	const { email, password } = values;
+
+	const response = await auth.api.signInEmail({
+		body: {
+			email,
+			password,
+		},
+		asResponse: true,
+	});
+
+	if (!response.ok) {
+		console.log(response);
+		return {
+			error: "Něco se pokazilo při přihlašování",
+		};
+	}
+
+	redirect("/nastenka");
+}
+```
+
+### Protected Page
+
+```ts
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+
+export default async function ProtectedPage() {
+	const session = await auth.api.getSession({
+		headers: await headers(),
+	});
+
+	if (!session) {
+		redirect("/prihlaseni");
+	}
+
+	return <h1>Hello User</h1>;
+}
+```
