@@ -1,44 +1,41 @@
-
 # Better Auth + Neon DB + Prisma ORM + NextJS Learning Web App
 
 This NextJS web application showcases how you can use Better Auth with Prisma ORM (through Prisma adapter) in your application.
-
-
-
 
 ## Project Set-Up
 
 Create a folder and create new NextJS project in there:
 
 ```bash
-  npx create-next-app@latest .
+pnpm create-next-app@latest .
 ```
 
 Install Prisma and dependencies
 
 ```bash
-  npm install prisma --save-dev
-  npm install @prisma/client
+pnpm add -D prisma
+pnpm add @prisma/client
 ```
+
 ## Prisma Set-Up
 
 Initialize Prisma in your project:
 
 ```bash
-  npx prisma init
+pnpm prisma init
 ```
 
 Now remove ***output   = "../src/generated/prisma"*** from the ***schema.prisma*** so the file looks like this:
 
-```bash
-  generator client {
-    provider = "prisma-client-js"
-  }
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
 
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 ```
 
 Now add the database connection string into the ***.env*** to `DATABASE_URL=`.
@@ -46,7 +43,7 @@ Now add the database connection string into the ***.env*** to `DATABASE_URL=`.
 Configure the Prisma client generator:
 
 ```bash
-  npx prisma generate
+pnpm prisma generate
 ```
 
 Create ***prisma.ts*** file in `src/lib` folder and set up the Prisma client like this:
@@ -55,7 +52,7 @@ Create ***prisma.ts*** file in `src/lib` folder and set up the Prisma client lik
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = global as unknown as {
-	prisma: PrismaClient;
+  prisma: PrismaClient;
 };
 
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -65,18 +62,26 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 export default prisma;
 ```
 
+Add prisma generation to script in ***package.json***:
+```json
+   "scripts": {
+      ...
+      "postinstall": "prisma generate"
+   },
+```
+
 ## Better-Auth Set-Up
 
 First, install the Better-Auth core package:
 
 ```bash
-  npm install better-auth
+pnpm add better-auth
 ```
 
 Next, generate a secure secret that Better-Auth will use to sign authentication tokens. This ensures your tokens cannot be messed with.
 
 ```bash
-npx @better-auth/cli@latest secret
+pnpm dlx @better-auth/cli@latest secret
 ```
 
 Copy the generated secret and add it, along with your application's URL, to your ***.env*** file:
@@ -94,21 +99,21 @@ import prisma from "@/lib/prisma";
 import { nextCookies } from "better-auth/next-js";
 
 export const auth = betterAuth({
-	database: prismaAdapter(prisma, {
-		provider: "postgresql", // Change based on you database
-	}),
-	emailAndPassword: { // This enables e-mail and password provider
-		enabled: true,  // For other providers check the documentation
-		autoSignIn: false,
-	},
-	plugins: [nextCookies()], // Allows for server-side authentication
+  database: prismaAdapter(prisma, {
+    provider: "postgresql", // Change based on you database
+  }),
+  emailAndPassword: { // This enables e-mail and password provider
+    enabled: true,  // For other providers check the documentation
+    autoSignIn: false,
+  },
+  plugins: [nextCookies()], // Allows for server-side authentication
 });
 ```
 
 Add Better-Auth models to your schema
 
 ```bash
-  npx @better-auth/cli generate
+pnpm dlx @better-auth/cli@latest generate
 ```
 
 This will add the [following models](https://www.prisma.io/docs/guides/betterauth-nextjs#32-add-better-auth-models-to-your-schema).
@@ -116,10 +121,14 @@ This will add the [following models](https://www.prisma.io/docs/guides/betteraut
 Migrate the database:
 
 ```bash
-  npx prisma migrate dev --name add-auth-models
+pnpm prisma migrate dev --name add-auth-models
 ```
 
-Set up the API routes in ***src/app/api/auth/[...all]/route.ts***:
+```bash
+pnpm prisma generate
+```
+
+Set up the API routes in ***src/app/api/auth/\[...all]/route.ts***:
 
 ```ts
 import { auth } from "@/lib/auth";
@@ -135,6 +144,7 @@ import { createAuthClient } from 'better-auth/react'
 
 export const { signIn, signUp, signOut, useSession } = createAuthClient()
 ```
+
 ## Basic Usage
 
 ### Sign Up Action
@@ -143,24 +153,24 @@ export const { signIn, signUp, signOut, useSession } = createAuthClient()
 "use server";
 
 export async function signUp(values: z.infer<typeof signUpFormSchema>) {
-	const { name, email, password } = values;
+  const { name, email, password } = values;
 
-	const response = await auth.api.signUpEmail({
-		body: {
-			name,
-			email,
-			password,
-		},
-		asResponse: true,
-	});
+  const response = await auth.api.signUpEmail({
+    body: {
+      name,
+      email,
+      password,
+    },
+    asResponse: true,
+  });
 
-	if (response.status !== 200) {
-		return {
-			error: "Něco se pokazilo",
-		};
-	}
+  if (response.status !== 200) {
+    return {
+      error: "Něco se pokazilo",
+    };
+  }
 
-	redirect("/prihlaseni");
+  redirect("/prihlaseni");
 }
 ```
 
@@ -170,24 +180,24 @@ export async function signUp(values: z.infer<typeof signUpFormSchema>) {
 "use server";
 
 export async function signIn(values: z.infer<typeof signInFormSchema>) {
-	const { email, password } = values;
+  const { email, password } = values;
 
-	const response = await auth.api.signInEmail({
-		body: {
-			email,
-			password,
-		},
-		asResponse: true,
-	});
+  const response = await auth.api.signInEmail({
+    body: {
+      email,
+      password,
+    },
+    asResponse: true,
+  });
 
-	if (!response.ok) {
-		console.log(response);
-		return {
-			error: "Něco se pokazilo při přihlašování",
-		};
-	}
+  if (!response.ok) {
+    console.log(response);
+    return {
+      error: "Něco se pokazilo při přihlašování",
+    };
+  }
 
-	redirect("/nastenka");
+  redirect("/nastenka");
 }
 ```
 
@@ -199,14 +209,14 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function ProtectedPage() {
-	const session = await auth.api.getSession({
-		headers: await headers(),
-	});
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-	if (!session) {
-		redirect("/prihlaseni");
-	}
+  if (!session) {
+    redirect("/prihlaseni");
+  }
 
-	return <h1>Hello User</h1>;
+  return <h1>Hello User</h1>;
 }
 ```
